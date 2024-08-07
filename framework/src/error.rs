@@ -1,25 +1,5 @@
 pub use maglev_macros::HttpError;
 
-// Requirements:
-// - ? should "just work" in most cases
-// - Easy to specify internal error message, external error message, and error code
-// - Easy to create errors
-// - Users create and grow their own error type
-// - Standar JSON response, nice to have, way to customize
-//
-// We also need a clear way to return errors from this library, the maglev::Error type which easily maps to user's error types
-
-// pub struct Error {
-//     message: String,
-//     code: StatusCode,
-// }
-
-// impl Error {
-//     fn unauthorized(message: &str) -> Error {
-//         Error { message: message.into(), code: StatusCode::UNAUTHORIZED }
-//     }
-// }
-
 /// Google JSON Style Guide for Errors
 ///
 /// <https://google.github.io/styleguide/jsoncstyleguide.xml?showone=error#error>

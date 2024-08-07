@@ -48,7 +48,7 @@ async-trait = "0.1.51"
 # dotenvy = "0.15.0"
 # env_logger = "0.11.3"
 rand = "0.8.4"
-# parse-display = "0.9.0"
+parse-display = "0.9.0"
 # url = { version = "2.5.0", features = ["serde"] }
 tracing = "0.1.40"
 # tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
