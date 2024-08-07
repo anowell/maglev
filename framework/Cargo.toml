@@ -21,23 +21,19 @@ serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.117"
 
 # Crypto
-orion = "0.17.6"
+# orion = "0.17.6"
 argon2 = "0.5"
 
 # Axum builds on Tower
-tower = "0.4.11"
-tower-http = { version = "0.5.0", features = [
-    "catch-panic",
-    "cors",
-    "compression-full",
-    "sensitive-headers",
-    "timeout",
-    "trace",
-] }
-
-## HTTP helpers
-# reqwest = { version = "0.12.4", features = ["json"] }
-# oauth2 = "4.4.2"
+# tower = "0.4.11"
+# tower-http = { version = "0.5.0", features = [
+#     "catch-panic",
+#     "cors",
+#     "compression-full",
+#     "sensitive-headers",
+#     "timeout",
+#     "trace",
+# ] }
 
 # Error handling
 thiserror = "1.0.30"
@@ -48,20 +44,17 @@ jwt = "0.16.0"
 hmac = "0.12.1"
 sha2 = "0.10.8"
 time = { version = "0.3.30", features = ["serde", "serde-human-readable", "formatting", "parsing"] }
-uuid = { version = "1.0", features = ["serde"] }
 async-trait = "0.1.51"
 # dotenvy = "0.15.0"
 # env_logger = "0.11.3"
-# itertools = "0.13"
-# log = "0.4.14"
 rand = "0.8.4"
-parse-display = "0.9.0"
+# parse-display = "0.9.0"
 # url = { version = "2.5.0", features = ["serde"] }
 tracing = "0.1.40"
 # tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-base64 = "0.22.1"
-regex = "1.10.4"
-toml = "0.8.13"
+# base64 = "0.22.1"
+# regex = "1.10.4"
+# toml = "0.8.13"
 
 
 [dev-dependencies]
