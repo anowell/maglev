@@ -23,6 +23,7 @@ and exploring experimental-level capabilities across these feature areas:
 - [x] HTTP error handling
 - [x] Application config
 - [x] Encryption/decryption utilities
+- [x] Graceful shutdown
 - [ ] SQLx Model patterns
 - [ ] OpenAPI spec generation
 - [ ] Route listing (e.g. like `rails routes`)

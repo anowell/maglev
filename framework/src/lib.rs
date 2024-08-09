@@ -5,8 +5,10 @@ pub mod auth;
 pub mod config;
 pub mod crypto;
 pub mod error;
+pub mod serve;
 
 pub use config::EnvConfig;
+pub use serve::serve;
 
 #[macro_export]
 macro_rules! anyhow_from {

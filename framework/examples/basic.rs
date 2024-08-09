@@ -13,7 +13,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 pub struct Config {
     database_url: String,
     hmac_key: String,
-    port: u32,
+    port: u16,
 }
 
 #[derive(Clone)]
@@ -56,6 +56,7 @@ type JsonResult<T> = Result<Json<T>>;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let config = Arc::new(Config::from_env()?);
+    let port = config.port;
 
     let db = PgPoolOptions::new()
         .max_connections(50)
@@ -67,16 +68,17 @@ async fn main() -> anyhow::Result<()> {
     let ctx = Context { db, config, jwt };
 
     let routes = api_router(ctx);
-    maglev::serve(routes, (Ipv4Addr::UNSPECIFIED, config.port))
+    maglev::serve((Ipv4Addr::UNSPECIFIED, port), routes)
         .await
         .context("error running HTTP server")?;
     Ok(())
 }
 
 fn api_router(ctx: Context) -> Router {
-    Router::new().route("/health", get(health))
-    // .route("/login", get(login))
-    // .route("/me", get(me))
+    Router::new()
+        .route("/health", get(health))
+        .route("/login", get(login))
+        .route("/me", get(me))
 }
 
 #[handler]
@@ -100,7 +102,7 @@ async fn login(ctx: State<Context>, data: Json<LoginReq>) -> Result<Response> {
         role: user.role,
     };
 
-    ctx.jwt.generate_token_response(auth_user)
+    Ok(ctx.jwt.generate_reponse(auth_user))
 }
 
 #[handler]

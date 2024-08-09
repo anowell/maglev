@@ -1,5 +1,3 @@
-use std::{ops::Deref, sync::Arc};
-
 use serde::de::DeserializeOwned;
 
 pub use config::ConfigError;
