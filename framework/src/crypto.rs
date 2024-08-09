@@ -5,9 +5,13 @@ use base64::prelude::*;
 use orion::aead;
 use serde::{
     de::{self, Visitor},
-    Deserialize, Deserializer,
+    Deserializer,
 };
 
+/// Encryption key suitable for including in request state
+///
+/// Exposes helpers to encrypt/decrypt, but opaque
+/// to prevent leaking the key through logs or responses
 #[derive(Clone)]
 pub struct EncryptionKey(Arc<aead::SecretKey>);
 
@@ -30,37 +34,55 @@ impl From<orion::errors::UnknownCryptoError> for CryptoError {
 }
 
 impl EncryptionKey {
-    pub fn from_slice(val: &[u8]) -> Result<EncryptionKey, CryptoError> {
-        let bytes = BASE64_STANDARD.decode(val)?;
-        let key = aead::SecretKey::from_slice(&bytes)?;
+    pub fn try_from_base64(val: &str) -> Result<EncryptionKey, CryptoError> {
+        let bytes = BASE64_STANDARD.decode(val.as_bytes())?;
+        EncryptionKey::try_from(&*bytes)
+    }
+}
+
+impl TryFrom<&[u8]> for EncryptionKey {
+    type Error = CryptoError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        let key = aead::SecretKey::from_slice(bytes)?;
         Ok(EncryptionKey(Arc::new(key)))
     }
 }
 
-impl<'de> Deserialize<'de> for EncryptionKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct EncryptionKeyVisitor;
+/// Helper to deserialize EncryptionKey from base64
+///
+/// Use with serde's `deserialize_with` attribute
+///
+/// ```rust
+/// # use serde::Deserialize;
+/// #[derive(Deserialize)]
+/// struct Config {
+///     #[serde(deserialize_with = "deserialize_base64_key")]
+///     encryption_key: EncryptionKey,
+/// }
+/// ````
+pub fn deserialize_base64_key<'de, D>(deserializer: D) -> Result<EncryptionKey, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct EncryptionKeyVisitor;
 
-        impl<'de> Visitor<'de> for EncryptionKeyVisitor {
-            type Value = EncryptionKey;
+    impl<'de> Visitor<'de> for EncryptionKeyVisitor {
+        type Value = EncryptionKey;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a base64 encoded string representing a secret key")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                EncryptionKey::from_slice(value.as_bytes()).map_err(de::Error::custom)
-            }
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a base64 encoded string representing a secret key")
         }
 
-        deserializer.deserialize_str(EncryptionKeyVisitor)
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            EncryptionKey::try_from_base64(value).map_err(de::Error::custom)
+        }
     }
+
+    deserializer.deserialize_str(EncryptionKeyVisitor)
 }
 
 /// Encrypts the message using provided key on a blocking thread
