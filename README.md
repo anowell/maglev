@@ -21,7 +21,8 @@ and exploring experimental-level capabilities across these feature areas:
 
 - [x] Jwt Auth
 - [x] HTTP error handling
-- [ ] Application config
+- [x] Application config
+- [x] Encryption/decryption utilities
 - [ ] SQLx Model patterns
 - [ ] OpenAPI spec generation
 - [ ] Route listing (e.g. like `rails routes`)

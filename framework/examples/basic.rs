@@ -1,10 +1,10 @@
 use std::{net::Ipv4Addr, sync::Arc};
 
-use anyhow::Context;
+use anyhow::Context as _;
 use axum::response::{IntoResponse, Response};
 use axum::{extract::State, http, routing::get, Json, Router};
 use maglev::auth::{Jwt, JwtConfig, JwtManager};
-use maglev::handler;
+use maglev::{handler, EnvConfig};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -17,7 +17,7 @@ pub struct Config {
 }
 
 #[derive(Clone)]
-pub struct ApiContext {
+pub struct Context {
     pub config: Arc<Config>,
     pub db: PgPool,
     pub jwt: JwtManager,
@@ -28,6 +28,10 @@ enum Error {
     #[error("Unauthorized")]
     #[http_error(UNAUTHORIZED)]
     Unauthorized,
+
+    #[error("Internal Server Error: {0:?}")]
+    #[http_error(INTERNAL_SERVER_ERROR, "an internal server error occurred")]
+    Anyhow(#[from] anyhow::Error),
 }
 
 impl IntoResponse for Error {
@@ -51,7 +55,7 @@ type JsonResult<T> = Result<Json<T>>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let config = maglev::parse_config()?;
+    let config = Arc::new(Config::from_env()?);
 
     let db = PgPoolOptions::new()
         .max_connections(50)
@@ -59,8 +63,8 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("Could not connect to database_url")?;
 
-    let jwt = JwtConfig::new(config.hmac_key).build();
-    let ctx = ApiContext { db, config, jwt };
+    let jwt = JwtConfig::new(&config.hmac_key).build();
+    let ctx = Context { db, config, jwt };
 
     let routes = api_router(ctx);
     maglev::serve(routes, (Ipv4Addr::UNSPECIFIED, config.port))
@@ -69,11 +73,10 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn api_router(ctx: ApiContext) -> Router {
-    Router::new()
-        .route("/health", get(health))
-        .route("/login", get(login))
-        .route("/me", get(me))
+fn api_router(ctx: Context) -> Router {
+    Router::new().route("/health", get(health))
+    // .route("/login", get(login))
+    // .route("/me", get(me))
 }
 
 #[handler]
@@ -88,7 +91,7 @@ struct LoginReq {
 }
 
 #[handler]
-async fn login(ctx: State<ApiContext>, data: Json<LoginReq>) -> Result<Response> {
+async fn login(ctx: State<Context>, data: Json<LoginReq>) -> Result<Response> {
     let user = models::user::get_user_with_password_hash(&ctx.db, &data.email).await?;
     maglev::auth::verify_password(data.password, user.password_hash).await?;
 
@@ -101,7 +104,7 @@ async fn login(ctx: State<ApiContext>, data: Json<LoginReq>) -> Result<Response>
 }
 
 #[handler]
-async fn me(auth_user: Jwt<AuthUser>, ctx: State<ApiContext>) -> JsonResult<User> {
+async fn me(auth_user: Jwt<AuthUser>, ctx: State<Context>) -> JsonResult<User> {
     let user = models::user::get_user(&ctx.db, auth_user.id).await?;
     Ok(user)
 }
