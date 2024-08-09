@@ -1004,6 +1004,7 @@ dependencies = [
  "axum-extra",
  "base64 0.22.1",
  "config",
+ "dotenvy",
  "futures",
  "hmac",
  "if-addrs",
