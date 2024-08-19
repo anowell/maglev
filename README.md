@@ -6,7 +6,7 @@ Built on Axum and SQLx.
 
 ## Principles
 
-**Maglev enables blazing-fast development of blazing-fast JSON APIs.**
+**Maglev enables faster development of JSON APIs.**
 
 - Just a library: does not replace Axum, merely extends it
 - Pragmatic defaults: less time configuring to achieve good practices
@@ -14,7 +14,7 @@ Built on Axum and SQLx.
 
 ## Status
 
-*Experimental, yet powering a production system*
+*Experimental: currently powering a pre-production system*
 
 The current focus is extracting patterns from our existing system
 and exploring experimental-level capabilities across these feature areas:
@@ -24,9 +24,9 @@ and exploring experimental-level capabilities across these feature areas:
 - [x] Application config
 - [x] Encryption/decryption utilities
 - [x] Graceful shutdown
-- [ ] SQLx Model patterns
+- [ ] SQLx data/model patterns
 - [ ] OpenAPI spec generation
-- [ ] Route listing (e.g. like `rails routes`)
+- [ ] Route helpers (e.g. CRUD) and listing (e.g. like `rails routes`)
 - [ ] Admin functions (admin SQL, impersonation, etc.)
 - [ ] Background workers (thread vs service, cron)
 - [ ] Mailer patterns
@@ -37,6 +37,5 @@ and exploring experimental-level capabilities across these feature areas:
 For the forseeable future, Maglev is NOT:
 
 - **Reinventing fundamentals**: We love Axum, SQLx, and many more core pieces of the ecosystem.
-- **Prescribing frontend**: Pick the ideal frontend stack for your team - as long as it works with JSON APIs.    
-- **ORM-based**: Plenty of people love ORMs - awesome. We design with SQL front-and-center.
-
+- **Prescribing frontend**: Pick the ideal frontend stack for your team - as long as it works with JSON APIs.
+- **ORM-based**: Plenty of people love ORMs - awesome. We design and build with SQL front-and-center.
