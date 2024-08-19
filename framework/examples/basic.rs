@@ -1,10 +1,12 @@
 use std::{net::Ipv4Addr, sync::Arc};
 
 use anyhow::Context as _;
+use axum::extract::FromRef;
 use axum::response::{IntoResponse, Response};
 use axum::{extract::State, http, routing::get, Json, Router};
 use maglev::auth::{Jwt, JwtConfig, JwtManager};
-use maglev::{handler, EnvConfig};
+use maglev::auth::basic::{AuthUser, Claims, RevocationList}
+use maglev::EnvConfig;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -16,11 +18,12 @@ pub struct Config {
     port: u16,
 }
 
-#[derive(Clone)]
+#[derive(Clone, FromRef)]
 pub struct Context {
     pub config: Arc<Config>,
     pub db: PgPool,
     pub jwt: JwtManager,
+    pub revoked_tokens: RevocationList,
 }
 
 #[derive(Debug, thiserror::Error, maglev::HttpError)]
@@ -65,7 +68,9 @@ async fn main() -> anyhow::Result<()> {
         .context("Could not connect to database_url")?;
 
     let jwt = JwtConfig::new(&config.hmac_key).build();
-    let ctx = Context { db, config, jwt };
+    // TODO: persist and sync. This is currently an in-memory revocation list
+    let revoked_tokens = RevocationList::default();
+    let ctx = Context { db, config, jwt, revoked_tokens };
 
     let routes = api_router(ctx);
     maglev::serve((Ipv4Addr::UNSPECIFIED, port), routes)
@@ -78,10 +83,10 @@ fn api_router(ctx: Context) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/login", get(login))
+        .route("/login", get(logout))
         .route("/me", get(me))
 }
 
-#[handler]
 async fn health() -> JsonResult<Value> {
     Ok(Json(json!({"ok": true})))
 }
@@ -92,7 +97,6 @@ struct LoginReq {
     password: String,
 }
 
-#[handler]
 async fn login(ctx: State<Context>, data: Json<LoginReq>) -> Result<Response> {
     let user = models::user::get_user_with_password_hash(&ctx.db, &data.email).await?;
     maglev::auth::verify_password(data.password, user.password_hash).await?;
@@ -105,12 +109,15 @@ async fn login(ctx: State<Context>, data: Json<LoginReq>) -> Result<Response> {
     Ok(ctx.jwt.generate_reponse(auth_user))
 }
 
-#[handler]
+async fn logout(claims: Claims, ctx: State<Context>) -> Result<Response> {
+    // TODO: persist revoked tokens
+    ctx.revoked_tokens.insert(claims.sub, claims.exp);
+    // TODO: implement logout_response / generate_logout_cookie
+    Ok(ctx.jwt.logout_response())
+}
+
 async fn me(auth_user: Jwt<AuthUser>, ctx: State<Context>) -> JsonResult<User> {
     let user = models::user::get_user(&ctx.db, auth_user.id).await?;
     Ok(user)
 }
 
-async fn get_user(db: &PgPool, user_id: Uuid) -> Result<User> {
-    let record = sqlx::query_as!(User, "SELECT id, name, avatar FROM users").await?;
-}
