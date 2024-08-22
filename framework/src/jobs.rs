@@ -1,11 +1,23 @@
 use axum::async_trait;
 use futures::Future;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Deref;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{collections::VecDeque, time::Duration};
 use tokio::sync::Mutex;
-use tokio_cron_scheduler::{Job as CronJob, JobScheduler};
+use tokio_cron_scheduler::{Job as CronJob, JobScheduler, JobSchedulerError};
 use tracing::Instrument;
+
+#[derive(Debug, thiserror::Error)]
+pub enum JobsError {
+    #[error("invalid cron schedule")]
+    InvalidCron,
+    #[error("invalid duration")]
+    InvalidDuration,
+    #[error("job scheduling error {0}")]
+    Schedule(#[from] JobSchedulerError),
+}
 
 pub struct JobQ<T: QueueProvider<S>, S> {
     provider: Arc<T>,
@@ -72,7 +84,7 @@ where
                         async move {
                             job.perform(state).await;
                         }
-                        .instrument(tracing::info_span!("Job::perform")),
+                        .instrument(tracing::info_span!("JobQ")),
                     );
                 } else {
                     // Add some delay or backoff to avoid busy-waiting
@@ -84,7 +96,7 @@ where
         log::trace!("spawning cron scheduler");
         // Spawn a cron thread that populates the queue from cron jobs
         self.scheduler.start().await.expect("cron scheduler panic");
-        log::info!("🏃 Job runner started")
+        log::info!("⏳ JobQ running")
     }
 
     pub async fn enqueue<J>(&self, job: J)
@@ -104,7 +116,12 @@ where
     /// sec   min   hour   day of month   month   day of week   year
     /// *     *     *      *              *       *             *
     /// ```
-    pub async fn cron(&mut self, schedule: &str, job: impl Job<S> + 'static) {
+    pub async fn cron(
+        &mut self,
+        schedule: impl TryInto<cron::Schedule>,
+        job: impl Job<S> + 'static,
+    ) -> Result<(), JobsError> {
+        let schedule = schedule.try_into().map_err(|_| JobsError::InvalidCron)?;
         let provider = self.provider.clone();
         let job = Arc::new(job);
         let cron_job = CronJob::new_async(schedule, move |_uuid, _lock| {
@@ -115,14 +132,18 @@ where
             })
         })
         .unwrap();
-        self.scheduler
-            .add(cron_job)
-            .await
-            .expect("failed to add cron job");
+        self.scheduler.add(cron_job).await?;
+        Ok(())
     }
 
-    pub async fn repeat(&mut self, interval: impl TryInto<Duration>, job: impl Job<S> + 'static) {
-        let interval = interval.try_into().ok().expect("invalid duration");
+    pub async fn repeat(
+        &mut self,
+        interval: impl TryInto<Duration>,
+        job: impl Job<S> + 'static,
+    ) -> Result<(), JobsError> {
+        let interval = interval
+            .try_into()
+            .map_err(|_| JobsError::InvalidDuration)?;
         let provider = self.provider.clone();
         let job = Arc::new(job);
         let repeated_job = CronJob::new_repeated_async(interval, move |_uuid, _lock| {
@@ -134,10 +155,8 @@ where
         })
         .unwrap();
 
-        self.scheduler
-            .add(repeated_job)
-            .await
-            .expect("failed to add repeated job");
+        self.scheduler.add(repeated_job).await?;
+        Ok(())
     }
 }
 
@@ -169,5 +188,53 @@ where
 {
     async fn perform(&self, ctx: S) {
         self.deref().perform(ctx).await
+    }
+}
+
+/// Schedule wrapper for serde convenience
+/// Remove all this and rexport cron::Schedule
+/// when https://github.com/zslayton/cron/pull/118 lands
+
+#[derive(Debug, Clone)]
+pub struct Schedule(cron::Schedule);
+
+impl Serialize for Schedule {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Schedule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        cron::Schedule::from_str(&s)
+            .map(Schedule)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl Deref for Schedule {
+    type Target = cron::Schedule;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Schedule> for cron::Schedule {
+    fn from(value: Schedule) -> Self {
+        value.0
+    }
+}
+
+impl From<&Schedule> for cron::Schedule {
+    fn from(value: &Schedule) -> Self {
+        value.0.clone()
     }
 }
