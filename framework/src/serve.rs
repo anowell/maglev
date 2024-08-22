@@ -15,7 +15,7 @@ pub async fn serve<S: ToSocketAddrs>(addr: S, router: Router) -> std::io::Result
 fn print_listener_urls(listener: &TcpListener) {
     if let Ok(addr) = listener.local_addr() {
         let port = addr.port();
-        log::info!("Listening on port {}", port);
+        log::info!("🚄 Listening on port {}", port);
         match addr {
             SocketAddr::V4(addr4) if addr4.ip().is_unspecified() => {
                 for ip in get_interface_ips(false) {
