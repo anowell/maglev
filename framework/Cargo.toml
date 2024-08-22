@@ -10,17 +10,17 @@ tokio = { version = "1.14.0", features = [
     "rt-multi-thread",
     "signal",
 ] }
+tokio-cron-scheduler = "0.11.0"
 axum = { version = "0.7.3", features = ["tower-log", "macros"] }
 axum-extra = { version = "0.9.3", features = ["typed-header", "cookie", "typed-routing"] }
 
 if-addrs = "0.13.2"
 
-# Clap for config via args or env
-config = "0.14.0"
 
 # Serialize & Deserialize
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.117"
+serde-env = "0.2.0"
 
 # Crypto
 orion = "0.17.6"
@@ -59,15 +59,15 @@ base64 = "0.22.1"
 # toml = "0.8.13"
 
 
-[dev-dependencies]
-sqlx = { version = "0.7", features = [
-    "runtime-tokio-native-tls",
-    "postgres",
-    "uuid",
-    "time",
-    "json"
-] }
-anyhow = "1.0.48"
+# [dev-dependencies]
+# sqlx = { version = "0.7", features = [
+#     "runtime-tokio-native-tls",
+#     "postgres",
+#     "uuid",
+#     "time",
+#     "json"
+# ] }
+# anyhow = "1.0.48"
 
 
 
