@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "maglev-macros",
     "framework",
+    "cli",
 ]
