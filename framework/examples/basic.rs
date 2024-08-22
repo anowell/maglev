@@ -4,8 +4,8 @@ use anyhow::Context as _;
 use axum::extract::FromRef;
 use axum::response::{IntoResponse, Response};
 use axum::{extract::State, http, routing::get, Json, Router};
+use maglev::auth::basic::{AuthUser, Claims, RevocationList};
 use maglev::auth::{Jwt, JwtConfig, JwtManager};
-use maglev::auth::basic::{AuthUser, Claims, RevocationList}
 use maglev::EnvConfig;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -70,7 +70,12 @@ async fn main() -> anyhow::Result<()> {
     let jwt = JwtConfig::new(&config.hmac_key).build();
     // TODO: persist and sync. This is currently an in-memory revocation list
     let revoked_tokens = RevocationList::default();
-    let ctx = Context { db, config, jwt, revoked_tokens };
+    let ctx = Context {
+        db,
+        config,
+        jwt,
+        revoked_tokens,
+    };
 
     let routes = api_router(ctx);
     maglev::serve((Ipv4Addr::UNSPECIFIED, port), routes)
@@ -120,4 +125,3 @@ async fn me(auth_user: Jwt<AuthUser>, ctx: State<Context>) -> JsonResult<User> {
     let user = models::user::get_user(&ctx.db, auth_user.id).await?;
     Ok(user)
 }
-
