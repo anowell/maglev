@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+set -e
+
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+begin() {
+  echo -e "${YELLOW}${BOLD}» ${1}${NC}"
+}
+
+success() {
+  echo -e "${GREEN}${BOLD}» ${1}${NC}"
+}
+
+# Update package repositories once at the start
+if [[ -f /etc/arch-release ]]; then
+    sudo pacman -Sy --noconfirm
+elif [[ -f /etc/lsb-release ]]; then
+    sudo apt update
+fi
+
+# Helper to check if a tool is installed
+found() {
+  if command -v "$1" >/dev/null 2>&1; then
+    success "$1 already installed"
+    return 0
+  else
+    begin "Installing $1..."
+    return 1
+  fi
+}
+
+# Helper to check if a file is already present
+found_file() {
+  if [[ -f "$1" ]]; then
+    success "$1 already present"
+    return 0
+  else
+    begin "Creating $1..."
+    return 1
+  fi
+}
+
+# Check and install rustup and stable Rust
+install_rustup() {
+  found rustup && return
+  
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install rustup
+    rustup-init -y
+  elif [[ -f /etc/arch-release ]]; then
+    sudo pacman -S --noconfirm rustup
+  elif [[ -f /etc/lsb-release ]]; then
+    sudo apt install -y rustup
+    rustup-init -y
+  fi
+}
+
+install_rust() {
+  begin "Install stable rust and rust-analyzer"
+  rustup install stable
+  rustup component add rust-analyzer
+}
+
+install_cargo_watch() {
+  found cargo-watch && return
+  cargo install cargo-watch
+}
+
+# Check and install Just
+install_just() {
+  found just && return
+  
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install just
+  elif [[ -f /etc/arch-release ]]; then
+    sudo pacman -S --noconfirm just
+  elif [[ -f /etc/lsb-release ]]; then
+    sudo apt install -y just
+  fi
+}
+
+
+# Main script
+install_rustup
+install_rust
+
+install_cargo_watch
+install_just
+
+echo
+echo -e "${GREEN}${BOLD}Bootstrap tasks completed.${NC} Ready to build with '${BOLD}just dev${NC}'"
+
