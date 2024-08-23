@@ -122,6 +122,13 @@ where
         job: impl Job<S> + 'static,
     ) -> Result<(), JobsError> {
         let schedule = schedule.try_into().map_err(|_| JobsError::InvalidCron)?;
+        if let Some(next) = schedule.upcoming(chrono::Utc).next() {
+            tracing::debug!("Cron job '{}'. Next occurrence: {}", schedule, next);
+        } else {
+            tracing::warn!("Cron schedule '{}' will never fire", schedule);
+            return Err(JobsError::InvalidCron);
+        }
+
         let provider = self.provider.clone();
         let job = Arc::new(job);
         let cron_job = CronJob::new_async(schedule, move |_uuid, _lock| {

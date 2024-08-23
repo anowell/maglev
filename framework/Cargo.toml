@@ -60,6 +60,7 @@ tracing = "0.1.40"
 # tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 base64 = "0.22.1"
 cron = "0.12.1"
+chrono = { version = "0.4.38", default-features = false }
 # regex = "1.10.4"
 # toml = "0.8.13"
 
