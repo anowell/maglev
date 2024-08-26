@@ -40,6 +40,23 @@ For the forseeable future, Maglev is NOT:
 - **Prescribing frontend**: Pick the ideal frontend stack for your team - as long as it works with JSON APIs.
 - **ORM-based**: Plenty of people love ORMs - awesome. We design and build with SQL front-and-center.
 
+## Getting Started
+
+To start a new app:
+
+TBD
+
+
+To add to an existing Axum app:
+
+```
+cargo add maglev --git https://github.com/meetsidebar/maglev.git
+
+# or manually add to Cargo.toml:
+maglev = { git = "https://github.com/meetsidebar/maglev.git" }
+```
+
+
 
 ## Contributing
 
