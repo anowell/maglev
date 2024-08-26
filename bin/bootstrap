@@ -47,7 +47,7 @@ found_file() {
 # Check and install rustup and stable Rust
 install_rustup() {
   found rustup && return
-  
+
   if [[ "$OSTYPE" == "darwin"* ]]; then
     brew install rustup
     rustup-init -y
@@ -56,6 +56,19 @@ install_rustup() {
   elif [[ -f /etc/lsb-release ]]; then
     sudo apt install -y rustup
     rustup-init -y
+  fi
+}
+
+# Check and install rustup and stable Rust
+install_zola() {
+  found zola && return
+
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install zola
+  elif [[ -f /etc/arch-release ]]; then
+    sudo pacman -S --noconfirm zola
+  elif [[ -f /etc/lsb-release ]]; then
+    snap install --edge zola
   fi
 }
 
@@ -73,7 +86,7 @@ install_cargo_watch() {
 # Check and install Just
 install_just() {
   found just && return
-  
+
   if [[ "$OSTYPE" == "darwin"* ]]; then
     brew install just
   elif [[ -f /etc/arch-release ]]; then
@@ -90,6 +103,7 @@ install_rust
 
 install_cargo_watch
 install_just
+install_zola
 
 echo
 echo -e "${GREEN}${BOLD}Bootstrap tasks completed.${NC} Ready to build with '${BOLD}just dev${NC}'"
