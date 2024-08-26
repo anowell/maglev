@@ -5,7 +5,7 @@ use axum::extract::FromRef;
 use axum::response::{IntoResponse, Response};
 use axum::{extract::State, http, routing::get, Json, Router};
 use maglev::auth::basic::{AuthUser, Claims, RevocationList};
-use maglev::auth::{Jwt, JwtConfig, JwtManager};
+use maglev::auth::{Jwt, JwtConfig, JwtContext};
 use maglev::EnvConfig;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -22,7 +22,7 @@ pub struct Config {
 pub struct Context {
     pub config: Arc<Config>,
     pub db: PgPool,
-    pub jwt: JwtManager,
+    pub jwt: JwtContext,
     pub revoked_tokens: RevocationList,
 }
 

@@ -1,9 +1,116 @@
+//! Auth extractors and helpers
+//!
+//! ## Basic Usage
+//!
+//! The simplest usage is to use the extractors in the `basic` module (feature = "basic").
+//!
+//! ```
+//! use maglev::auth::{Jwt, JwtOption, JwtConfig};
+//! use maglev::auth::basic::{AuthUser, AuthAdmin, Claims, Role, LoginResponse};
+//!
+//! // In your login handler, verify password
+//! async fn login(ctx: State<Context>, jar: CookieJar, data: Json<LoginReq>) -> Result<Response> {
+//!     let user = models::user::get_user_with_password_hash(&ctx.db, &data.email).await?;
+//!     maglev::auth::verify_password(data.password, user.password_hash).await?;
+//!
+//!     // Then construct AuthUser which implements IntoClaims:
+//!     let auth_user = AuthUser {
+//!         id: user.id,
+//!         role: user.role,
+//!     };
+//!
+//!     // Now we can generate JWT token. This example also generates a session cookie:
+//!     let (token, cookie) = ctx.jwt.generate_jwt_and_cookie(auth_user);
+//!     Ok(LoginResponse::new(jar, cookie, token))
+//! }
+//! ````
+//!
+//! And you can authenticate routes with the various extractors:
+//!
+//! ```
+//! async fn auth_required(auth_user: Jwt<AuthUser>)
+//! async fn auth_optional(auth_user: JwtOption<AuthUser>)
+//! async fn admin_only(admin_user: Jwt<AuthAdmin>)
+//! ```
+//!
+//! ## Custom Auth Extractors
+//!
+//! To create your own auth extractors and/or your own claims:
+//!
+//! 1) Define your own claims that implement `ValidateClaims`
+//! 2) Implement one type that implements `ToClaims` (the type you construct on login)
+//! 3) Define one or more auth extractors that implement `ClaimsExtractor` and derive `FromRequest` `via(Jwt)`
+//!
+//! Note: it is common to have multiple extractors that use the same claims (e.g. `AuthUser` and `AuthAdmin` if the claims specify role).
+//!
+//! Example:
+//!
+//! ```
+//! #[derive(Serialize, Deserialize)]
+//! pub struct MyClaims {
+//!     user_id: Uuid,
+//!     role: Option<UserRole>,
+//!
+//!     /// Standard JWT `exp` claim.
+//!     exp: i64,
+//! }
+//!
+//! #[async_trait]
+//! impl<S> ValidateClaims<S> for MyClaims
+//! where
+//!     S: Send + Sync,
+//! {
+//!     type Rejection = Error;
+//!     async fn validate(&self, _state: &S) -> Result<(), Self::Rejection> {
+//!         if self.is_expired() {
+//!             tracing::debug!("token expired");
+//!             return Err(Error::Unauthorized);
+//!         }
+//!
+//!         // TODO: JWTs are stateless, so we should add a mechanism here
+//!         //       to ensure token isn't revoked.
+//!         Ok(())
+//!     }
+//! }
+//!
+//!
+//! #[derive(FromRequest)]
+//! #[from_request(via(Jwt))]
+//! pub struct AuthUser {
+//!     pub user_id: Uuid,
+//!     pub role: Option<UserRole>,
+//! }
+//!
+//! impl ToClaims<Claims> for AuthUser {
+//!     fn to_claims(&self, exp: i64) -> Claims {
+//!         Claims {
+//!             user_id: self.user_id,
+//!             role: self.role,
+//!             exp,
+//!         }
+//!     }
+//! }
+//!
+//! #[async_trait]
+//! impl ClaimsExtractor<Context> for AuthUser {
+//!     type Rejection = Error;
+//!     type Claims = Claims;
+//!     async fn try_extract(claims: Self::Claims, _ctx: &Context) -> Result<Self, Self::Rejection> {
+//!         Ok(Self {
+//!             user_id: claims.user_id,
+//!             role: claims.role,
+//!         })
+//!     }
+//! }
+//! ```
+//!
+//! Note: more advanced auth extractors (e.g. requiring path components) should just implement them the standard Axum way.
+
 use std::ops::Deref;
 use std::sync::Arc;
 
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash};
-use axum::body::Body;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum_extra::extract::cookie;
@@ -11,13 +118,11 @@ use axum_extra::extract::cookie;
 use async_trait::async_trait;
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::request::Parts;
-use axum::Json;
 use axum_extra::extract::cookie::SameSite;
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::{Authorization, Cookie, HeaderMapExt};
 use hmac::{Hmac, Mac};
 use jwt::{FromBase64, VerifyWithKey};
-use serde_json::json;
 use sha2::Sha384;
 use time::OffsetDateTime;
 
@@ -45,6 +150,8 @@ impl IntoResponse for AuthError {
     }
 }
 
+/// Configures how JWT cookie is generated
+#[derive(Clone)]
 pub struct CookieConfig {
     name: &'static str,
     http_only: bool,
@@ -53,7 +160,7 @@ pub struct CookieConfig {
 }
 
 impl CookieConfig {
-    /// Uses strict, secure, http_only settings by default
+    /// Default coookie configuration with specified cookie name
     pub fn new(name: &'static str) -> CookieConfig {
         CookieConfig {
             name,
@@ -63,14 +170,25 @@ impl CookieConfig {
         }
     }
 
+    /// Forbids JS from accessing the cookie
+    ///
+    /// Sets `HttpOnly` attribute of `Set-Cookie` header
     pub fn http_only(mut self, http_only: bool) -> Self {
         self.http_only = http_only;
         self
     }
+
+    /// Indicates that the cookie is sent to the server only when a request is made with the https (except localhost).
+    ///
+    /// Sets `Secure` attribute of `Set-Cookie` header to improve resistance to man-in-the-middle attacks.
     pub fn secure(mut self, secure: bool) -> Self {
         self.secure = secure;
         self
     }
+
+    /// Controls whether or not a cookie is sent with cross-site requests
+    ///
+    /// Provides some protection against cross-site request forgery attacks (CSRF).
     pub fn same_site(mut self, same_site: SameSite) -> Self {
         self.same_site = same_site;
         self
@@ -90,17 +208,23 @@ impl Default for CookieConfig {
 }
 
 #[derive(Clone)]
-pub struct JwtManager(Arc<JwtConfig>);
+pub struct JwtContext(Arc<JwtConfig>);
 
+#[derive(Clone)]
 pub struct JwtConfig {
     key: Hmac<Sha384>,
-    // algorithm: jwt::AlgorithmType,
     duration: time::Duration,
     cookie_config: CookieConfig,
-    // validation_state: STATE,
 }
 
 impl JwtConfig {
+    /// Initialize `JwtConfig` with a secret key
+    ///
+    /// The secret is used to construct the HMAC that will sign JWT tokens with SHA-384
+    ///
+    /// By default, uses 2 week duration and `CookieConfig::default`
+    ///
+    /// Panics if provided key is less than 32 bytes
     pub fn new(secret: &str) -> JwtConfig {
         assert!(
             secret.len() >= 32,
@@ -115,36 +239,47 @@ impl JwtConfig {
             key,
             duration: DEFAULT_SESSION_LENGTH,
             cookie_config: CookieConfig::default(),
-            // validation_state: (),
         }
     }
 
+    /// Sets the duration until expiration for generated JWT tokens
     pub fn duration(mut self, duration: time::Duration) -> Self {
         self.duration = duration;
         self
     }
 
+    /// Configures how JWT cookie is generated
     pub fn cookie_config(mut self, cookie_config: CookieConfig) -> Self {
         self.cookie_config = cookie_config;
         self
     }
 
-    pub fn build(self) -> JwtManager {
-        JwtManager(Arc::new(self))
+    pub fn build(self) -> JwtContext {
+        JwtContext(Arc::new(self))
     }
 }
 
-impl JwtManager {
-    pub fn generate_token<C>(&self, claims: C) -> String
+impl JwtContext {
+    /// Generates JWT token
+    pub fn generate_jwt<T, C>(&self, claims: T) -> String
     where
+        T: ToClaims<C>,
         C: jwt::SignWithKey<String>,
     {
+        let exp = (OffsetDateTime::now_utc() + self.0.duration).unix_timestamp();
         claims
+            .to_claims(exp)
             .sign_with_key(&self.0.key)
             .expect("HMAC signing should be infallible")
     }
 
-    pub fn generate_session_cookie(&self, token: &str) -> cookie::Cookie<'static> {
+    /// Generate a JWT token cookie containing JWT token (per `CookieConfig`)
+    pub fn generate_jwt_and_cookie<T, C>(&self, claims: T) -> (String, cookie::Cookie<'static>)
+    where
+        T: ToClaims<C>,
+        C: jwt::SignWithKey<String>,
+    {
+        let token = self.generate_jwt(claims);
         let cookie_config = &self.0.cookie_config;
         let cookie = cookie::Cookie::build((cookie_config.name, token.to_owned()))
             .http_only(cookie_config.http_only)
@@ -152,24 +287,15 @@ impl JwtManager {
             .same_site(cookie_config.same_site)
             .build();
 
-        cookie
+        (token, cookie)
     }
 
-    pub fn generate_reponse<T, C>(&self, claims: T) -> Response<Body>
-    where
-        T: ToClaims<C>,
-        C: jwt::SignWithKey<String>,
-    {
-        let exp = (OffsetDateTime::now_utc() + self.0.duration).unix_timestamp();
-        let token = self.generate_token(claims.to_claims(exp));
-        let cookie = self.generate_session_cookie(&token);
-
-        let body = Json(json!({"token": token}));
-        let jar = cookie::CookieJar::new().add(cookie);
-
-        (jar, body).into_response()
-    }
-
+    /// Extracts a `ClaimsExtractor` from request parts
+    ///
+    /// Checks both `Authorization` header and session cookie.
+    /// Verifies AND validates claims.
+    ///
+    /// Both "No Auth" and "Invalid Auth" are treated as "Unauthorized"
     pub async fn extract<J, C, E, S>(&self, parts: &mut Parts, state: &S) -> Result<J, E>
     where
         S: Send + Sync,
@@ -183,6 +309,13 @@ impl JwtManager {
             .map_err(E::from)
     }
 
+    /// Extracts a `ClaimsExtractor` from request parts
+    ///
+    /// Checks both `Authorization` header and session cookie.
+    /// Verifies AND validataes claims.
+    ///
+    /// Returns Ok(None) if the request did not contain auth info
+    /// This allows handling "No Auth" separate from "Invalid Auth"
     pub async fn extract_opt<J, C, E, S>(
         &self,
         parts: &mut Parts,
@@ -200,6 +333,12 @@ impl JwtManager {
         }
     }
 
+    /// Extracts JWT claims from request parts
+    ///
+    /// Checks both `Authorization` header and session cookie.
+    ///
+    /// Verifies claims are signed by provided key, but does NOT validate them (e.g. expiration)
+    ///
     /// Returns Ok(None) if the request did not contain auth info
     pub fn extract_claims<C, E>(&self, parts: &mut Parts) -> Result<Option<C>, E>
     where
@@ -214,7 +353,7 @@ impl JwtManager {
 
         // Check session cookie
         if let Some(cookie) = parts.headers.typed_get::<Cookie>() {
-            if let Some(token) = cookie.get("jwt") {
+            if let Some(token) = cookie.get(self.0.cookie_config.name) {
                 let claims = self.verify_token::<C, E>(token)?;
                 return Ok(Some(claims));
             }
@@ -223,7 +362,9 @@ impl JwtManager {
         Ok(None)
     }
 
-    /// Parse & verify JWT as Claims
+    /// Parses token as claims returning them only if valid
+    ///
+    /// Validity determined by `ValidateClaims` trait.
     pub async fn validate_token<C, E, S>(&self, token: &str, state: &S) -> Result<C, E>
     where
         S: Send + Sync,
@@ -236,7 +377,9 @@ impl JwtManager {
         Ok(claims)
     }
 
-    /// Parse & verify JWT as Claims
+    /// Verifies JWT is signed by our key and returns parsed claims
+    ///
+    /// Note: this does no additional validations (e.g. expiration)
     pub fn verify_token<C, E>(&self, token: &str) -> Result<C, E>
     where
         C: FromBase64,
@@ -320,7 +463,7 @@ impl<J> Deref for Jwt<J> {
 impl<S, J> FromRequestParts<S> for Jwt<J>
 where
     S: Send + Sync,
-    JwtManager: FromRef<S>,
+    JwtContext: FromRef<S>,
     J: ClaimsExtractor<S>,
 {
     type Rejection = AuthError;
@@ -355,13 +498,13 @@ impl<J> Deref for JwtOption<J> {
 impl<S, J> FromRequestParts<S> for JwtOption<J>
 where
     S: Send + Sync,
-    JwtManager: FromRef<S>,
+    JwtContext: FromRef<S>,
     J: ClaimsExtractor<S>,
 {
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let jwt: JwtManager = JwtManager::from_ref(state);
+        let jwt: JwtContext = JwtContext::from_ref(state);
         let claims = jwt.extract_claims::<J::Claims, AuthError>(parts)?;
 
         match claims {
@@ -392,13 +535,13 @@ pub struct JwtClaims<C>(pub C);
 impl<S, C> FromRequestParts<S> for JwtClaims<C>
 where
     S: Send + Sync,
-    JwtManager: FromRef<S>,
+    JwtContext: FromRef<S>,
     C: FromBase64 + ValidateClaims<S>,
 {
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let jwt: JwtManager = JwtManager::from_ref(state);
+        let jwt: JwtContext = JwtContext::from_ref(state);
         let claims = jwt
             .extract_claims::<C, AuthError>(parts)?
             .ok_or(AuthError::Unauthorized)?;
@@ -418,9 +561,13 @@ pub mod basic {
     use axum::{
         async_trait,
         extract::{FromRef, FromRequest},
+        response::IntoResponse,
+        Json,
     };
+    use axum_extra::extract::cookie::{Cookie, CookieJar};
     use parse_display::{Display, FromStr};
     use serde::{Deserialize, Serialize};
+    use serde_json::json;
     use time::OffsetDateTime;
 
     use super::{AuthError, ClaimsExtractor, Jwt, JwtClaims, ToClaims, ValidateClaims};
@@ -458,6 +605,33 @@ pub mod basic {
                 id: claims.sub,
                 role,
             })
+        }
+    }
+
+    /// A login response that sets the session cookie and sends it in the JSON payload
+    ///
+    /// Since the `Jwt` extractor checks for either, this response makes it easy to send both
+    /// and let the client choose which it wants to use for auth.
+    ///
+    /// Typically makes sense to have browser clients simply use a secure cookie,
+    /// but have other apps and tools safely store the token.
+    pub struct LoginResponse {
+        jar: CookieJar,
+        token: String,
+    }
+
+    impl LoginResponse {
+        /// Constructor: provide the cookie jar extracted from the current request
+        pub fn new(jar: CookieJar, cookie: Cookie<'static>, token: String) -> LoginResponse {
+            let jar = jar.add(cookie);
+            LoginResponse { jar, token }
+        }
+    }
+
+    impl IntoResponse for LoginResponse {
+        fn into_response(self) -> axum::response::Response {
+            let body = Json(json!({"token": self.token}));
+            (self.jar, body).into_response()
         }
     }
 
