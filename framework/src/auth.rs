@@ -157,6 +157,7 @@ pub struct CookieConfig {
     http_only: bool,
     secure: bool,
     same_site: SameSite,
+    path: String,
 }
 
 impl CookieConfig {
@@ -167,6 +168,7 @@ impl CookieConfig {
             http_only: true,
             secure: true,
             same_site: SameSite::Strict,
+            path: "/".to_string(),
         }
     }
 
@@ -193,6 +195,14 @@ impl CookieConfig {
         self.same_site = same_site;
         self
     }
+
+    pub fn path<S>(mut self, path: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.path = path.into();
+        self
+    }
 }
 
 impl Default for CookieConfig {
@@ -203,6 +213,7 @@ impl Default for CookieConfig {
             http_only: true,
             secure: true,
             same_site: SameSite::Strict,
+            path: "/".to_string(),
         }
     }
 }
@@ -285,6 +296,7 @@ impl JwtContext {
             .http_only(cookie_config.http_only)
             .secure(cookie_config.secure)
             .same_site(cookie_config.same_site)
+            .path(cookie_config.path.clone())
             .build();
 
         (token, cookie)
