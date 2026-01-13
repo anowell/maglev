@@ -3,35 +3,31 @@ name = "maglev"
 version = "0.1.0"
 edition = "2021"
 
-[[example]]
-name = "basic"
-required-features = ["basic"]
-
 [dependencies]
 futures = "0.3"
-tokio = { version = "1.14.0", features = [
+tokio = { version = "1.49.0", features = [
     "macros",
     "rt-multi-thread",
     "signal",
 ] }
-tokio-cron-scheduler = "0.11.0"
-axum = { version = "0.7.3", features = ["tower-log", "macros"] }
-axum-extra = { version = "0.9.3", features = ["typed-header", "cookie", "typed-routing"] }
+tokio-cron-scheduler = "0.15.1"
+axum = { version = "0.8.8", features = ["tower-log", "macros"] }
+axum-extra = { version = "0.12.5", features = ["typed-header", "cookie", "typed-routing"] }
 
-if-addrs = "0.13.2"
+if-addrs = "0.14.0"
 
 
 # Serialize & Deserialize
-serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.117"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 serde-env = "0.2.0"
 
 # Crypto
-orion = "0.17.6"
+orion = "0.17.12"
 argon2 = "0.5"
 
 # Axum builds on Tower
-tower = "0.4.11"
+tower = "0.5.3"
 # tower-http = { version = "0.5.0", features = [
 #     "catch-panic",
 #     "cors",
@@ -42,38 +38,37 @@ tower = "0.4.11"
 # ] }
 
 # Error handling
-thiserror = "1.0.30"
+thiserror = "2.0.17"
 maglev-macros = { path = "../maglev-macros" }
 
 # Utilities
 jwt = "0.16.0"
 hmac = "0.12.1"
-sha2 = "0.10.8"
-time = { version = "0.3.30", features = ["serde", "serde-human-readable", "formatting", "parsing"] }
-async-trait = "0.1.51"
+sha2 = "0.10.9"
+time = { version = "0.3.45", features = ["serde", "serde-human-readable", "formatting", "parsing"] }
+async-trait = "0.1.89"  # Required: Job<S> and QueueProvider<S> use Box<dyn> (needs object-safe traits)
 dotenvy = "0.15.0"
-log = "0.4.14"
-rand = "0.8.4"
-parse-display = "0.9.0"
+rand = "0.8.5"
+parse-display = "0.10.0"
 # url = { version = "2.5.0", features = ["serde"] }
-tracing = "0.1.40"
+tracing = "0.1.44"
 # tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 base64 = "0.22.1"
-cron = "0.12.1"
-chrono = { version = "0.4.38", default-features = false }
+cron = "0.15.0"
+chrono = { version = "0.4.42", default-features = false }
 # regex = "1.10.4"
 # toml = "0.8.13"
 
 
-# [dev-dependencies]
-# sqlx = { version = "0.7", features = [
-#     "runtime-tokio-native-tls",
-#     "postgres",
-#     "uuid",
-#     "time",
-#     "json"
-# ] }
-# anyhow = "1.0.48"
+[dev-dependencies]
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-native-tls",
+    "postgres",
+    "uuid",
+    "time",
+    "json"
+] }
+anyhow = "1.0.100"
 
 
 

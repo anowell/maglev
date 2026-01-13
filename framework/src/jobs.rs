@@ -1,4 +1,4 @@
-use axum::async_trait;
+use async_trait::async_trait;
 use futures::Future;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Deref;
@@ -74,7 +74,7 @@ where
         let provider = self.provider.clone();
 
         // Spawn a thread to manage the queue
-        log::trace!("spawning queue manager");
+        tracing::trace!("spawning queue manager");
         tokio::spawn(async move {
             loop {
                 if let Some(job) = provider.dequeue().await {
@@ -93,17 +93,17 @@ where
             }
         });
 
-        log::trace!("spawning cron scheduler");
+        tracing::trace!("spawning cron scheduler");
         // Spawn a cron thread that populates the queue from cron jobs
         self.scheduler.start().await.expect("cron scheduler panic");
-        log::info!("⏳ JobQ running")
+        tracing::info!("⏳ JobQ running")
     }
 
     pub async fn enqueue<J>(&self, job: J)
     where
         J: Job<S> + 'static,
     {
-        log::trace!("job enqueue");
+        tracing::trace!("job enqueue");
         let job = Box::new(job);
         self.provider.enqueue(job).await;
     }

@@ -55,7 +55,6 @@
 //!     exp: i64,
 //! }
 //!
-//! #[async_trait]
 //! impl<S> ValidateClaims<S> for MyClaims
 //! where
 //!     S: Send + Sync,
@@ -91,7 +90,6 @@
 //!     }
 //! }
 //!
-//! #[async_trait]
 //! impl ClaimsExtractor<Context> for AuthUser {
 //!     type Rejection = Error;
 //!     type Claims = Claims;
@@ -115,7 +113,6 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum_extra::extract::cookie;
 
-use async_trait::async_trait;
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::request::Parts;
 use axum_extra::extract::cookie::SameSite;
@@ -422,14 +419,13 @@ pub trait ToClaims<C>: Sized {
 /// Typically, you'll only have a single type of claims.
 /// This implementation should validation of the claims
 /// such as ensuring not expired or revoked.
-#[async_trait]
 pub trait ValidateClaims<S>: Sized + Sync
 where
     S: Sync,
 {
     type Rejection: From<AuthError>;
 
-    async fn validate(&self, state: &S) -> Result<(), Self::Rejection>;
+    fn validate(&self, state: &S) -> impl std::future::Future<Output = Result<(), Self::Rejection>> + Send;
 }
 
 /// Extracts claims into a an extractor.
@@ -439,12 +435,11 @@ where
 ///
 /// For example, a basic `AuthUser` merely needs to convert claims,
 /// but an `AuthAdmin` would need to validate that the claims are valid for an admin.
-#[async_trait]
 pub trait ClaimsExtractor<S: Send + Sync>: Sized {
     type Rejection;
     type Claims: FromBase64 + ValidateClaims<S> + Send;
 
-    async fn try_extract(claims: Self::Claims, state: &S) -> Result<Self, Self::Rejection>;
+    fn try_extract(claims: Self::Claims, state: &S) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send;
 }
 
 /// Extractor for routes that MUST be authenticated.
@@ -471,7 +466,6 @@ impl<J> Deref for Jwt<J> {
     }
 }
 
-#[async_trait]
 impl<S, J> FromRequestParts<S> for Jwt<J>
 where
     S: Send + Sync,
@@ -506,7 +500,6 @@ impl<J> Deref for JwtOption<J> {
     }
 }
 
-#[async_trait]
 impl<S, J> FromRequestParts<S> for JwtOption<J>
 where
     S: Send + Sync,
@@ -543,7 +536,6 @@ where
 /// Using `Jwt` or `JwtOption` is more common.
 pub struct JwtClaims<C>(pub C);
 
-#[async_trait]
 impl<S, C> FromRequestParts<S> for JwtClaims<C>
 where
     S: Send + Sync,
@@ -571,7 +563,6 @@ pub mod basic {
     };
 
     use axum::{
-        async_trait,
         extract::{FromRef, FromRequest},
         response::IntoResponse,
         Json,
@@ -599,7 +590,6 @@ pub mod basic {
         pub role: Option<Role>,
     }
 
-    #[async_trait]
     impl<S> ClaimsExtractor<S> for AuthUser
     where
         S: Send + Sync,
@@ -686,7 +676,6 @@ pub mod basic {
     }
 
     // This impl is stateless; a good impl should check revocation
-    #[async_trait]
     impl<S> ValidateClaims<S> for Claims
     where
         S: Send + Sync,
@@ -717,7 +706,6 @@ pub mod basic {
         pub id: String,
     }
 
-    #[async_trait]
     impl<S> ClaimsExtractor<S> for AuthAdmin
     where
         S: Send + Sync,
@@ -768,7 +756,7 @@ pub mod basic {
 /// therfore performed on a thread where blocking is acceptable
 pub async fn hash_password(password: String) -> Result<String, AuthError> {
     tokio::task::spawn_blocking(move || -> Result<String, AuthError> {
-        let salt = SaltString::generate(rand::thread_rng());
+        let salt = SaltString::generate(&mut rand::rngs::OsRng);
         Ok(
             PasswordHash::generate(Argon2::default(), password, salt.as_salt())
                 .inspect_err(|e| tracing::warn!("failed to generate password hash: {}", e))

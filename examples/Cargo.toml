@@ -1,0 +1,33 @@
+[package]
+name = "maglev-examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Basic auth example - demonstrates JWT auth with user/admin roles
+[[bin]]
+name = "basic"
+path = "src/basic.rs"
+required-features = ["basic"]
+
+# Add more examples here following this pattern:
+# [[bin]]
+# name = "jobs-demo"
+# path = "src/jobs-demo.rs"
+
+[dependencies]
+maglev = { path = "../framework" }
+axum = "0.8"
+axum-extra = { version = "0.12", features = ["cookie"] }
+http = "1.0"
+tokio = { version = "1.49", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "time"] }
+anyhow = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[features]
+basic = ["maglev/basic"]

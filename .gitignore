@@ -2,6 +2,8 @@
 # will have compiled files and executables
 /target/
 
+Cargo.lock
+
 # Used for environment variables
 .env
 .env.d/

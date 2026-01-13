@@ -15,7 +15,7 @@ pub async fn serve<S: ToSocketAddrs>(addr: S, router: Router) -> std::io::Result
 fn print_listener_urls(listener: &TcpListener) {
     if let Ok(addr) = listener.local_addr() {
         let port = addr.port();
-        log::info!("🚄 Listening on port {}", port);
+        tracing::info!("🚄 Listening on port {}", port);
         match addr {
             SocketAddr::V4(addr4) if addr4.ip().is_unspecified() => {
                 for ip in get_interface_ips(false) {
@@ -45,10 +45,10 @@ fn get_interface_ips(ipv6: bool) -> Vec<IpAddr> {
 
 fn print_addr(addr: IpAddr, port: u16) {
     match addr {
-        _ if addr.is_loopback() => log::info!("➜  Local:   http://localhost:{}", port),
-        IpAddr::V4(_) => log::info!("➜  Network: http://{}:{}", addr, port),
+        _ if addr.is_loopback() => tracing::info!("➜  Local:   http://localhost:{}", port),
+        IpAddr::V4(_) => tracing::info!("➜  Network: http://{}:{}", addr, port),
         // Enclose IPv6 addresses in square brackets
-        IpAddr::V6(_) => log::info!("➜  Network: http://[{}]:{}", addr, port),
+        IpAddr::V6(_) => tracing::info!("➜  Network: http://[{}]:{}", addr, port),
     }
 }
 

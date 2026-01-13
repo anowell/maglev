@@ -2,7 +2,8 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Meta, NestedMeta};
+use syn::parse::Parser;
+use syn::{DeriveInput, Expr, Lit, Meta};
 
 pub(crate) fn http_error_derive_impl(input: DeriveInput) -> TokenStream {
     let name = &input.ident;
@@ -18,25 +19,33 @@ pub(crate) fn http_error_derive_impl(input: DeriveInput) -> TokenStream {
             let mut http_message = None;
 
             for attr in attrs {
-                if attr.path.is_ident("http_error") {
-                    if let Ok(Meta::List(meta_list)) = attr.parse_meta() {
-                        for (i, nested) in meta_list.nested.iter().enumerate() {
-                            match nested {
-                                NestedMeta::Meta(syn::Meta::Path(path)) if i == 0 => {
-                                    let code = path.clone();
-                                    http_code = Some(quote! { http::StatusCode::#code });
-                                    // http_code = Some(path.clone());
+                if attr.path().is_ident("http_error") {
+                    if let Meta::List(meta_list) = &attr.meta {
+                        let mut i = 0;
+                        let parsed = syn::punctuated::Punctuated::<Expr, syn::Token![,]>::parse_terminated
+                            .parse2(meta_list.tokens.clone());
+
+                        if let Ok(args) = parsed {
+                            for expr in args {
+                                match expr {
+                                    Expr::Path(path) if i == 0 => {
+                                        let code = &path.path;
+                                        http_code = Some(quote! { http::StatusCode::#code });
+                                    }
+                                    Expr::Lit(lit) if i == 0 => {
+                                        if let Lit::Int(int_lit) = &lit.lit {
+                                            let code = int_lit.base10_parse::<u16>().unwrap();
+                                            http_code = Some(quote! { http::StatusCode::from_u16(#code).unwrap() });
+                                        }
+                                    }
+                                    Expr::Lit(lit) if i == 1 => {
+                                        if let Lit::Str(str_lit) = &lit.lit {
+                                            http_message = Some(str_lit.value());
+                                        }
+                                    }
+                                    _ => {}
                                 }
-                                NestedMeta::Lit(syn::Lit::Int(lit)) if i == 0 => {
-                                    let code = lit.base10_parse::<u16>().unwrap();
-                                    http_code =
-                                        Some(quote! { http::StatusCode::from_u16(#code).unwrap() });
-                                    // http_code = Some(lit.base10_parse::<u16>().unwrap());
-                                }
-                                NestedMeta::Lit(syn::Lit::Str(lit)) if i == 1 => {
-                                    http_message = Some(lit.value());
-                                }
-                                _ => {}
+                                i += 1;
                             }
                         }
                     }

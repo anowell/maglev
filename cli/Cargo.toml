@@ -8,12 +8,12 @@ name = "maglev"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.86"
-askama = "0.12.1"
-clap = { version = "4.5.16", features = ["derive"] }
+anyhow = "1.0.100"
+askama = "0.13.1"
+clap = { version = "4.5.54", features = ["derive"] }
 heck = "0.5.0"
-pluralizer = "0.4.0"
-log = "0.4.22"
+pluralizer = "0.5.0"
+log = "0.4.29"
 simplelog = "0.12.2"
 
 
