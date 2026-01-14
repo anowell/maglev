@@ -4,59 +4,11 @@
 
 This document outlines concrete improvements to make Maglev the most ergonomic way to build durable JSON APIs in Rust. Organized by priority and aligned with the goal: **make it trivially easy to build production-ready JSON APIs without reinventing Axum**.
 
----
-
-## Priority 1: OpenAPI Integration
-
-### Problem
-API documentation is manual and out-of-sync with code. No automatic schema generation.
-
-### Solution: Integrate utoipa
-
-**Why utoipa**:
-- Most popular (2.6k stars), actively maintained
-- Code-first with derive macros (matches Maglev philosophy)
-- Framework-agnostic but excellent Axum integration
-- Compile-time generation (no runtime overhead)
-
-**Implementation**:
-```rust
-// In Cargo.toml
-utoipa = { version = "5", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "8", features = ["axum"] }
-
-// Usage
-#[derive(Serialize, Deserialize, ToSchema)]
-struct User {
-    id: Uuid,
-    email: String,
-}
-
-#[utoipa::path(
-    get,
-    path = "/users/{id}",
-    responses(
-        (status = 200, description = "User found", body = User),
-        (status = 404, description = "User not found")
-    )
-)]
-async fn get_user(Path(id): Path<Uuid>) -> Result<Json<User>, AppError> { ... }
-```
-
-**Maglev additions**:
-1. Re-export utoipa macros as `maglev::openapi::*`
-2. Add `OpenApiRouter` wrapper with built-in Swagger UI
-3. Auto-derive `ToSchema` for Maglev types (JwtClaims, error formats, etc.)
-4. Provide `#[derive(ToSchema)]` integration with `HttpError`
-
-**Estimated effort**: 2-3 days
-**References**:
-- [utoipa](https://github.com/juhaku/utoipa)
-- [utoipa integration guide](https://identeco.de/en/blog/generating_and_validating_openapi_docs_in_rust/)
+**Note**: For OpenAPI spec generation, use [utoipa-axum](https://github.com/juhaku/utoipa) directly. It integrates seamlessly with Axum and doesn't need a Maglev wrapper.
 
 ---
 
-## Priority 2: Transactional Outbox Pattern
+## Priority 1: Transactional Outbox Pattern
 
 ### Problem
 Jobs can be lost if enqueue fails after database commit (dual-write problem). No durability guarantees.
@@ -160,7 +112,7 @@ WHERE status = 'pending';
 
 ---
 
-## Priority 3: Request Validation
+## Priority 2: Request Validation
 
 ### Problem
 Manual validation scattered across handlers. Repetitive and error-prone.
@@ -208,7 +160,7 @@ async fn create_user(
 
 ---
 
-## Priority 4: Pagination Helpers
+## Priority 3: Pagination Helpers
 
 ### Problem
 Pagination logic repeated in every list endpoint. No standard format.
@@ -290,7 +242,7 @@ async fn list_users(
 
 ---
 
-## Priority 5: Enhanced CRUD Patterns
+## Priority 4: Enhanced CRUD Patterns
 
 ### Problem
 Current `CrudRouter` is basic. No filtering, sorting, soft deletes, or field selection.
@@ -329,7 +281,7 @@ CrudRouter::new("/users")
 
 ---
 
-## Priority 6: Observability Enhancements
+## Priority 5: Observability Enhancements
 
 ### Problem
 Minimal tracing integration. No metrics, no request IDs, no structured logging patterns.
@@ -386,7 +338,7 @@ let app = Router::new()
 
 ---
 
-## Priority 7: Health Check Endpoints
+## Priority 6: Health Check Endpoints
 
 ### Problem
 No standardized health checks for load balancers and monitoring.
@@ -452,7 +404,7 @@ let app = Router::new()
 
 ---
 
-## Priority 8: Connection Pooling Patterns
+## Priority 7: Connection Pooling Patterns
 
 ### Problem
 No guidance on SQLx pool configuration. Users may use suboptimal settings.
@@ -515,7 +467,7 @@ impl PoolConfig {
 
 ---
 
-## Priority 9: Rate Limiting
+## Priority 8: Rate Limiting
 
 ### Problem
 No built-in rate limiting. Users implement ad-hoc solutions.
@@ -560,7 +512,7 @@ X-RateLimit-Reset: 1673612400
 
 ---
 
-## Priority 10: Testing Utilities
+## Priority 9: Testing Utilities
 
 ### Problem
 No test helpers. Users reinvent test fixtures and mocks.

@@ -37,6 +37,10 @@ tower = "0.5.3"
 #     "trace",
 # ] }
 
+# OAuth2
+oauth2 = "4.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
 # Error handling
 thiserror = "2.0.17"
 maglev-macros = { path = "../maglev-macros" }
@@ -50,15 +54,21 @@ async-trait = "0.1.89"  # Required: Job<S> and QueueProvider<S> use Box<dyn> (ne
 dotenvy = "0.15.0"
 rand = "0.8.5"
 parse-display = "0.10.0"
-# url = { version = "2.5.0", features = ["serde"] }
+url = "2.5.0"
 tracing = "0.1.44"
 # tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 base64 = "0.22.1"
 cron = "0.15.0"
 chrono = { version = "0.4.42", default-features = false }
+uuid = { version = "1.11", features = ["v4", "serde"] }
 # regex = "1.10.4"
 # toml = "0.8.13"
 
+
+[dependencies.sqlx]
+version = "0.8"
+features = ["runtime-tokio-native-tls", "postgres", "uuid", "time"]
+optional = true
 
 [dev-dependencies]
 sqlx = { version = "0.8", features = [
@@ -75,3 +85,5 @@ anyhow = "1.0.100"
 [features]
 default = []
 basic = []
+sessions = ["dep:sqlx"]
+oauth = []

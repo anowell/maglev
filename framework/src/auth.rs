@@ -127,6 +127,12 @@ const DEFAULT_SESSION_LENGTH: time::Duration = time::Duration::weeks(2);
 
 pub use jwt::RegisteredClaims;
 
+// Sub-modules
+#[cfg(feature = "sessions")]
+pub mod session;
+
+pub mod oauth;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
     #[error("Unauthorized")]

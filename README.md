@@ -19,17 +19,20 @@ Built on Axum and SQLx.
 The current focus is extracting patterns from our existing system
 and exploring experimental-level capabilities across these feature areas:
 
-- [x] Jwt Auth
+- [x] JWT Auth
 - [x] HTTP error handling
 - [x] Application config
 - [x] Encryption/decryption utilities
 - [x] Graceful shutdown
+- [x] Background workers (in-memory queue, cron)
 - [ ] SQLx data/model patterns
-- [ ] OpenAPI spec generation
 - [ ] Route helpers (e.g. CRUD) and listing (e.g. like `rails routes`)
 - [ ] Admin functions (admin SQL, impersonation, etc.)
-- [x] Background workers (thread vs service, cron)
 - [ ] Mailer patterns
+
+## OpenAPI
+
+For OpenAPI spec generation, use [utoipa-axum](https://github.com/juhaku/utoipa) directly - it integrates seamlessly with Axum and provides comprehensive schema generation.
 
 
 ## Maglev is NOT
