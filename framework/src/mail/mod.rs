@@ -30,7 +30,7 @@
 //! |----------|----------|-------------|
 //! | `SMTP_HOST` | Yes | SMTP server hostname |
 //! | `SMTP_PORT` | No | Port (default: 587) |
-//! | `SMTP_USER` | No | Username for authentication |
+//! | `SMTP_USERNAME` | No | Username for authentication |
 //! | `SMTP_PASSWORD` | No | Password for authentication |
 //! | `SMTP_FROM` | Yes | Default sender address |
 //! | `SMTP_TLS` | No | `starttls` (default), `tls`, or `none` |

@@ -32,8 +32,8 @@ pub struct MailerConfig {
     pub port: u16,
 
     /// SMTP username for authentication.
-    #[serde(rename = "smtp_user")]
-    pub user: Option<String>,
+    #[serde(rename = "smtp_username")]
+    pub username: Option<String>,
 
     /// SMTP password for authentication.
     #[serde(rename = "smtp_password")]
@@ -103,8 +103,8 @@ impl SmtpMailer {
             .port(config.port)
             .timeout(Some(Duration::from_secs(config.timeout)));
 
-        if let (Some(user), Some(password)) = (config.user, config.password) {
-            builder = builder.credentials(Credentials::new(user, password));
+        if let (Some(username), Some(password)) = (config.username, config.password) {
+            builder = builder.credentials(Credentials::new(username, password));
         }
 
         let transport = builder.build();
