@@ -6,6 +6,8 @@ pub mod config;
 pub mod crypto;
 pub mod error;
 pub mod jobs;
+#[cfg(feature = "mail")]
+pub mod mail;
 pub mod routing;
 pub mod serve;
 

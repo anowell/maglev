@@ -70,6 +70,11 @@ version = "0.8"
 features = ["runtime-tokio-native-tls", "postgres", "uuid", "time"]
 optional = true
 
+[dependencies.lettre]
+version = "0.11"
+features = ["tokio1-native-tls", "builder"]
+optional = true
+
 [dev-dependencies]
 sqlx = { version = "0.8", features = [
     "runtime-tokio-native-tls",
@@ -87,3 +92,4 @@ default = []
 basic = []
 sessions = ["dep:sqlx"]
 oauth = []
+mail = ["dep:lettre"]
