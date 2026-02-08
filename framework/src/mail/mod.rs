@@ -11,6 +11,7 @@
 //!
 //! // 2. Send directly
 //! let email = Email::builder()
+//!     .from("noreply@myapp.com")
 //!     .to("user@example.com")
 //!     .subject("Welcome!")
 //!     .text("Thanks for signing up.")
@@ -32,7 +33,6 @@
 //! | `SMTP_PORT` | No | Port (default: 587) |
 //! | `SMTP_USERNAME` | No | Username for authentication |
 //! | `SMTP_PASSWORD` | No | Password for authentication |
-//! | `SMTP_FROM` | Yes | Default sender address |
 //! | `SMTP_TLS` | No | `starttls` (default), `tls`, or `none` |
 
 mod job;

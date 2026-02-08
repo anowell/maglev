@@ -33,9 +33,8 @@ pub struct Email {
     /// Optional reply-to address.
     #[serde(default)]
     pub reply_to: Option<String>,
-    /// Optional sender override (defaults to mailer's configured from address).
-    #[serde(default)]
-    pub from: Option<String>,
+    /// Sender address.
+    pub from: String,
 }
 
 impl Email {
@@ -107,7 +106,7 @@ impl EmailBuilder {
         self
     }
 
-    /// Override the sender address.
+    /// Set the sender address (required).
     pub fn from(mut self, address: impl Into<String>) -> Self {
         self.from = Some(address.into());
         self
@@ -118,6 +117,10 @@ impl EmailBuilder {
         if self.to.is_empty() {
             return Err(MailError::Build("at least one recipient required".into()));
         }
+
+        let from = self
+            .from
+            .ok_or_else(|| MailError::Build("from address required".into()))?;
 
         let subject = self
             .subject
@@ -137,7 +140,7 @@ impl EmailBuilder {
             subject,
             body,
             reply_to: self.reply_to,
-            from: self.from,
+            from,
         })
     }
 }
@@ -149,12 +152,14 @@ mod tests {
     #[test]
     fn build_text_email() {
         let email = Email::builder()
+            .from("sender@example.com")
             .to("user@example.com")
             .subject("Hello")
             .text("Body text")
             .build()
             .unwrap();
 
+        assert_eq!(email.from, "sender@example.com");
         assert_eq!(email.to, vec!["user@example.com"]);
         assert_eq!(email.subject, "Hello");
         assert!(matches!(email.body, EmailBody::Text(t) if t == "Body text"));
@@ -163,6 +168,7 @@ mod tests {
     #[test]
     fn build_multipart_email() {
         let email = Email::builder()
+            .from("sender@example.com")
             .to("a@b.com")
             .subject("Test")
             .text("Plain")
@@ -177,20 +183,26 @@ mod tests {
     }
 
     #[test]
+    fn build_requires_from() {
+        let result = Email::builder().to("a@b.com").subject("Hi").text("Body").build();
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn build_requires_recipient() {
-        let result = Email::builder().subject("Hi").text("Body").build();
+        let result = Email::builder().from("a@b.com").subject("Hi").text("Body").build();
         assert!(result.is_err());
     }
 
     #[test]
     fn build_requires_subject() {
-        let result = Email::builder().to("a@b.com").text("Body").build();
+        let result = Email::builder().from("a@b.com").to("a@b.com").text("Body").build();
         assert!(result.is_err());
     }
 
     #[test]
     fn build_requires_body() {
-        let result = Email::builder().to("a@b.com").subject("Hi").build();
+        let result = Email::builder().from("a@b.com").to("a@b.com").subject("Hi").build();
         assert!(result.is_err());
     }
 }

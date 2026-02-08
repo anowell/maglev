@@ -39,10 +39,6 @@ pub struct MailerConfig {
     #[serde(rename = "smtp_password")]
     pub password: Option<String>,
 
-    /// Default sender address.
-    #[serde(rename = "smtp_from")]
-    pub from: String,
-
     /// TLS mode: "starttls" (default), "tls", or "none".
     #[serde(rename = "smtp_tls", default = "default_tls")]
     pub tls: String,
@@ -68,13 +64,12 @@ fn default_timeout() -> u64 {
 #[derive(Clone)]
 pub struct SmtpMailer {
     transport: Arc<AsyncSmtpTransport<Tokio1Executor>>,
-    from: Mailbox,
 }
 
 impl SmtpMailer {
     /// Create a mailer from environment variables.
     ///
-    /// Reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS`.
+    /// Reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`.
     pub fn from_env() -> Result<Self, MailError> {
         dotenvy::dotenv().ok();
 
@@ -86,11 +81,6 @@ impl SmtpMailer {
 
     /// Create a mailer from explicit configuration.
     pub fn from_config(config: MailerConfig) -> Result<Self, MailError> {
-        let from: Mailbox = config
-            .from
-            .parse()
-            .map_err(|_| MailError::InvalidAddress(config.from.clone()))?;
-
         let mut builder = match config.tls.as_str() {
             "none" => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&config.host),
             "tls" => AsyncSmtpTransport::<Tokio1Executor>::relay(&config.host)
@@ -111,21 +101,15 @@ impl SmtpMailer {
 
         Ok(Self {
             transport: Arc::new(transport),
-            from,
         })
     }
 
     /// Build a lettre Message from our Email type.
     fn build_message(&self, email: &Email) -> Result<Message, MailError> {
-        let from_mailbox = email
+        let from_mailbox: Mailbox = email
             .from
-            .as_ref()
-            .map(|f| f.parse())
-            .transpose()
-            .map_err(|_| {
-                MailError::InvalidAddress(email.from.clone().unwrap_or_default())
-            })?
-            .unwrap_or_else(|| self.from.clone());
+            .parse()
+            .map_err(|_| MailError::InvalidAddress(email.from.clone()))?;
 
         let mut builder = Message::builder().from(from_mailbox);
 

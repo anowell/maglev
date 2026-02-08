@@ -34,13 +34,14 @@ pub trait HasMailer: Send + Sync + 'static {
 /// Enqueue this job to send emails asynchronously with automatic retries:
 ///
 /// ```ignore
-/// let job = SendEmailJob {
-///     email: Email::builder()
+/// let job = SendEmailJob::new(
+///     Email::builder()
+///         .from("noreply@myapp.com")
 ///         .to("user@example.com")
 ///         .subject("Welcome!")
 ///         .text("Thanks for joining.")
 ///         .build()?,
-/// };
+/// );
 /// enqueue(&queue, job).await?;
 /// ```
 ///
