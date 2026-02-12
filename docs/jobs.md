@@ -1,76 +1,59 @@
-# Background Jobs Architecture
+# Background Jobs
 
-## What Maglev Provides
+## Overview
 
-**Background job system** with in-memory queue, cron scheduling, and pluggable storage via traits.
+Pluggable background job system with serializable jobs, retry logic, cron scheduling, and a trait-based storage backend.
 
-**Three scheduling modes**: One-time (enqueue), cron expressions, fixed intervals.
+## Architecture
 
-**`Job<S>` trait**: Auto-implemented for closures. Jobs receive cloned state and run fire-and-forget (no return value).
+**`Job` trait** — Serializable struct with typed execution logic. Each job type defines `JOB_TYPE` (string identifier), `Context` (app state), and `perform()`.
 
-**`QueueProvider<S>` trait**: Abstract storage backend. Default `MemoryQueue` provided.
+**`QueueProvider` trait** — 3-method interface for storage backends: `insert`, `claim_next`, `update`. Apps implement this with their own SQL.
 
-## Key Design Decisions
+**`Worker<Q, S>`** — Generic processor that polls any `QueueProvider`. Owns all state-transition logic: retry with exponential backoff (2^attempts, capped at 300s), expiry checks, concurrent execution via semaphore.
 
-### Trait-Based Storage Abstraction
+**`Scheduler<Q>`** — Enqueues jobs on cron expressions or fixed intervals.
 
-`QueueProvider<S>` decouples job mechanics from storage. Default `MemoryQueue` (VecDeque) for simplicity, but implement Redis/Postgres backends for production durability.
+**`MemoryQueue`** — In-memory `QueueProvider` for testing. Not durable.
 
-Two methods: `enqueue()` adds jobs, `dequeue()` retrieves (returns `Option`).
+## Key Types
 
-### State Cloning
+- `JobEntry` — Serialized job representation (id, type, payload, status, attempts, timestamps, locking fields). Maps naturally to a DB row.
+- `JobStatus` — Enum: Pending, Running, Completed, Failed, Expired.
+- `JobOpts` — Per-job configuration: max_attempts, expires_in, delay.
+- `JobRegistry<S>` — Maps job type strings to deserialization + execution handlers.
 
-Jobs receive `S: Clone`. Make state a struct of `Arc<_>` fields (pools, configs) to avoid expensive clones. Jobs can't mutate shared state directly - use interior mutability or DB for coordination.
+## Usage Pattern
 
-### Fire-and-Forget Execution
+```rust
+// Define a job
+#[derive(Serialize, Deserialize)]
+struct SendEmail { to: String, subject: String }
 
-`Job::perform()` has no return type. Jobs handle errors internally - log, store in DB, or re-enqueue as needed. No automatic retry logic (apps vary too much).
+#[async_trait]
+impl Job for SendEmail {
+    const JOB_TYPE: &'static str = "send_email";
+    type Context = AppState;
 
-Pattern: Explicit retry loops inside job logic if needed.
+    async fn perform(self, ctx: &AppState) -> JobResult {
+        ctx.mailer.send(&self.to, &self.subject).await?;
+        Ok(None)
+    }
+}
 
-### Closure Support
+// Enqueue
+enqueue(&queue, SendEmail { to, subject }).await?;
 
-`Job<S>` auto-implemented for `Fn(S) -> impl Future`. Most jobs are closures capturing variables, not explicit structs. Simple and ergonomic.
+// Start worker
+let registry = JobRegistry::new()
+    .register::<SendEmail>();
+Worker::new(queue, registry, app_state)
+    .concurrency(4)
+    .start();
+```
 
-Tradeoff: Can't serialize closures easily. For persistent queues, use struct-based jobs with serde.
+## Persistence
 
-**Note**: `Job<S>` and `QueueProvider<S>` use `#[async_trait]` because `Box<dyn Job<S>>` requires object-safe traits. Native async fn in traits isn't object-safe (returns `impl Future`). `async_trait` is zero-cost at runtime - generates `Pin<Box<...>>` boilerplate.
+Apps implement `QueueProvider` against their own database schema. Use `maglev generate queue` to scaffold a Postgres implementation with `FOR UPDATE SKIP LOCKED` for safe concurrent claiming.
 
-**Future consideration**: Persistent job queues using concrete struct types (not trait objects) could avoid `async_trait` entirely. Trade closure ergonomics for serializability and potentially simpler trait bounds.
-
-### Two-Task Architecture
-
-`start()` spawns two tokio tasks:
-1. **Queue manager** - Dequeues and spawns job workers
-2. **Cron scheduler** - Enqueues scheduled jobs
-
-No concurrency limits built-in (jobs spawn immediately). Implement semaphore in `QueueProvider` if needed.
-
-### In-Memory Queue Default
-
-`MemoryQueue` is simple (VecDeque) but jobs lost on restart and not shared across instances. Fine for development, demos, or truly ephemeral tasks. Production apps should implement persistent `QueueProvider`.
-
-### No Automatic Retries
-
-Retry logic varies by job type (immediate retry vs exponential backoff vs DLQ). Better to be explicit in job code than provide one-size-fits-all mechanism.
-
-### Cron via tokio-cron-scheduler
-
-Standard cron syntax. Cron jobs enqueue through normal queue (not direct execution) enabling monitoring and backpressure.
-
-## Extensibility
-
-Implement `QueueProvider<S>` for persistent backends:
-- **Postgres**: SELECT FOR UPDATE SKIP LOCKED pattern
-- **Redis**: RPUSH/BLPOP with streams
-- **Concurrency limits**: Wrap provider with semaphore
-
-Struct-based jobs enable serialization (required for persistent queues). Closures work only with in-memory.
-
-Monitoring via tracing spans or metrics in provider implementation.
-
-## Current Limitations
-
-No job arguments (closure captures only), no built-in retry, no graceful shutdown, in-memory queue not durable.
-
-Future additions driven by real-world needs.
+See [principles.md](principles.md) — SQL lives in the app for compile-time verification.
