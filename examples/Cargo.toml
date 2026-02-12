@@ -14,13 +14,12 @@ required-features = ["basic"]
 [[bin]]
 name = "auth-password"
 path = "src/auth-password.rs"
-required-features = ["sessions"]
 
 # OAuth example - demonstrates Google/GitHub OAuth flows with session management
 [[bin]]
 name = "auth-oauth"
 path = "src/auth-oauth.rs"
-required-features = ["oauth", "sessions"]
+required-features = ["oauth"]
 
 # Add more examples here following this pattern:
 # [[bin]]
@@ -47,5 +46,4 @@ oauth2 = "4.4"
 
 [features]
 basic = ["maglev/basic"]
-sessions = ["maglev/sessions"]
 oauth = ["maglev/oauth"]

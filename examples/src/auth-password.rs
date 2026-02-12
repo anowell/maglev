@@ -91,10 +91,9 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::Router;
-use maglev::auth::session::{DeviceInfo, Session};
 use maglev::auth::{
-    hash_password, verify_password, AuthError, ClaimsExtractor, Jwt, JwtConfig, JwtContext,
-    ToClaims, ValidateClaims,
+    generate_secure_token, hash_password, hash_token, verify_password, AuthError, ClaimsExtractor,
+    Jwt, JwtConfig, JwtContext, ToClaims, ValidateClaims,
 };
 use maglev::EnvConfig;
 use serde::{Deserialize, Serialize};
@@ -394,14 +393,27 @@ async fn login(
 
     verify_password(req.password, password_hash).await?;
 
-    // Create session
-    let (session, refresh_token) =
-        Session::create(&state.db, user.id, DeviceInfo::default()).await?;
+    // Create session with refresh token
+    let session_id = Uuid::new_v4();
+    let refresh_token = generate_secure_token();
+    let refresh_hash = hash_token(&refresh_token);
+
+    sqlx::query(
+        r#"
+        INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
+        VALUES ($1, $2, $3, NOW() + INTERVAL '30 days')
+        "#,
+    )
+    .bind(session_id)
+    .bind(user.id)
+    .bind(&refresh_hash)
+    .execute(&state.db)
+    .await?;
 
     // Generate access JWT
     let auth_user = AuthUser {
         user_id: user.id,
-        session_id: session.id,
+        session_id,
     };
     let access_token = state.jwt.generate_jwt(auth_user);
 
@@ -416,18 +428,41 @@ async fn refresh(
     State(state): State<AppState>,
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>> {
-    // Find session by refresh token
-    let mut session = Session::find_by_refresh_token(&state.db, &req.refresh_token)
-        .await?
-        .ok_or(Error::Unauthorized)?;
+    // Find active session by refresh token hash
+    let token_hash = hash_token(&req.refresh_token);
+    let row = sqlx::query(
+        r#"
+        SELECT id, user_id
+        FROM auth_sessions
+        WHERE refresh_token_hash = $1
+          AND expires_at > NOW()
+          AND revoked_at IS NULL
+        "#,
+    )
+    .bind(&token_hash)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(Error::Unauthorized)?;
+
+    let session_id: Uuid = row.get("id");
+    let user_id: Uuid = row.get("user_id");
 
     // Rotate refresh token (security best practice)
-    let new_refresh_token = session.rotate_refresh_token(&state.db).await?;
+    let new_refresh_token = generate_secure_token();
+    let new_hash = hash_token(&new_refresh_token);
+
+    sqlx::query(
+        "UPDATE auth_sessions SET refresh_token_hash = $1, last_active_at = NOW() WHERE id = $2",
+    )
+    .bind(&new_hash)
+    .bind(session_id)
+    .execute(&state.db)
+    .await?;
 
     // Generate new access JWT
     let auth_user = AuthUser {
-        user_id: session.user_id,
-        session_id: session.id,
+        user_id,
+        session_id,
     };
     let access_token = state.jwt.generate_jwt(auth_user);
 
@@ -452,18 +487,30 @@ async fn list_sessions(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SessionInfo>>> {
     let user_id = Uuid::parse_str(&claims.sub).map_err(|_| Error::Unauthorized)?;
-    let sessions = Session::list_for_user(&state.db, user_id).await?;
 
-    let session_infos = sessions
+    let rows = sqlx::query(
+        r#"
+        SELECT id, created_at, last_active_at, expires_at,
+               device_name, ip_address, user_agent
+        FROM auth_sessions
+        WHERE user_id = $1 AND revoked_at IS NULL
+        ORDER BY last_active_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let session_infos = rows
         .into_iter()
-        .map(|s| SessionInfo {
-            id: s.id,
-            created_at: s.created_at,
-            last_active_at: s.last_active_at,
-            expires_at: s.expires_at,
-            device_name: s.device_name,
-            ip_address: s.ip_address,
-            user_agent: s.user_agent,
+        .map(|row| SessionInfo {
+            id: row.get("id"),
+            created_at: row.get("created_at"),
+            last_active_at: row.get("last_active_at"),
+            expires_at: row.get("expires_at"),
+            device_name: row.get("device_name"),
+            ip_address: row.get("ip_address"),
+            user_agent: row.get("user_agent"),
         })
         .collect();
 
@@ -477,17 +524,21 @@ async fn revoke_session(
 ) -> Result<StatusCode> {
     let user_id = Uuid::parse_str(&claims.sub).map_err(|_| Error::Unauthorized)?;
 
-    // Find session and verify ownership
-    let session = Session::find_by_id(&state.db, session_id)
-        .await?
-        .ok_or(Error::SessionNotFound)?;
+    // Revoke session (only if owned by this user)
+    let result = sqlx::query(
+        r#"
+        UPDATE auth_sessions SET revoked_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+        "#,
+    )
+    .bind(session_id)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
 
-    if session.user_id != user_id {
-        return Err(Error::Unauthorized);
+    if result.rows_affected() == 0 {
+        return Err(Error::SessionNotFound);
     }
-
-    // Revoke session
-    session.revoke(&state.db).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -496,11 +547,10 @@ async fn logout(Jwt(claims): Jwt<AccessTokenClaims>, State(state): State<AppStat
     let session_id = Uuid::parse_str(&claims.session_id).map_err(|_| Error::Unauthorized)?;
 
     // Revoke current session
-    let session = Session::find_by_id(&state.db, session_id)
-        .await?
-        .ok_or(Error::SessionNotFound)?;
-
-    session.revoke(&state.db).await?;
+    sqlx::query("UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1")
+        .bind(session_id)
+        .execute(&state.db)
+        .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

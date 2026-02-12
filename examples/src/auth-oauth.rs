@@ -95,15 +95,13 @@ use axum::Router;
 use maglev::auth::oauth::{
     GitHubClient, GitHubProfile, GoogleClient, GoogleProfile, TokenResponse,
 };
-use maglev::auth::session::{DeviceInfo, Session};
-use maglev::auth::{JwtConfig, JwtContext, ToClaims};
+use maglev::auth::{generate_secure_token, hash_token, JwtConfig, JwtContext, ToClaims};
 use maglev::EnvConfig;
-use oauth2::CsrfToken;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 // ===== Configuration =====
@@ -441,14 +439,27 @@ async fn google_callback(
     let (user, is_new) =
         find_or_create_oauth_account_google(&state.db, profile, tokens).await?;
 
-    // Create session
-    let (session, refresh_token) =
-        Session::create(&state.db, user.id, DeviceInfo::default()).await?;
+    // Create session with refresh token
+    let session_id = Uuid::new_v4();
+    let refresh_token = generate_secure_token();
+    let refresh_hash = hash_token(&refresh_token);
+
+    sqlx::query(
+        r#"
+        INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
+        VALUES ($1, $2, $3, NOW() + INTERVAL '30 days')
+        "#,
+    )
+    .bind(session_id)
+    .bind(user.id)
+    .bind(&refresh_hash)
+    .execute(&state.db)
+    .await?;
 
     // Generate access JWT
     let auth_user = AuthUser {
         user_id: user.id,
-        session_id: session.id,
+        session_id,
     };
     let access_token = state.jwt.generate_jwt(auth_user);
 
@@ -494,14 +505,27 @@ async fn github_callback(
     let (user, is_new) =
         find_or_create_oauth_account_github(&state.db, profile, tokens).await?;
 
-    // Create session
-    let (session, refresh_token) =
-        Session::create(&state.db, user.id, DeviceInfo::default()).await?;
+    // Create session with refresh token
+    let session_id = Uuid::new_v4();
+    let refresh_token = generate_secure_token();
+    let refresh_hash = hash_token(&refresh_token);
+
+    sqlx::query(
+        r#"
+        INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
+        VALUES ($1, $2, $3, NOW() + INTERVAL '30 days')
+        "#,
+    )
+    .bind(session_id)
+    .bind(user.id)
+    .bind(&refresh_hash)
+    .execute(&state.db)
+    .await?;
 
     // Generate access JWT
     let auth_user = AuthUser {
         user_id: user.id,
-        session_id: session.id,
+        session_id,
     };
     let access_token = state.jwt.generate_jwt(auth_user);
 

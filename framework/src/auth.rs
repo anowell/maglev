@@ -127,10 +127,6 @@ const DEFAULT_SESSION_LENGTH: time::Duration = time::Duration::weeks(2);
 
 pub use jwt::RegisteredClaims;
 
-// Sub-modules
-#[cfg(feature = "sessions")]
-pub mod session;
-
 pub mod oauth;
 
 #[derive(Debug, thiserror::Error)]
@@ -795,4 +791,24 @@ pub async fn verify_password(password: String, password_hash: String) -> Result<
     })
     .await
     .map_err(|_| AuthError::PasswordHashPanic)?
+}
+
+/// Generate a cryptographically secure random token (base64url, 32 bytes).
+///
+/// Useful for refresh tokens, CSRF tokens, and similar secrets.
+pub fn generate_secure_token() -> String {
+    use base64::Engine;
+    let mut rng = rand::thread_rng();
+    let bytes: [u8; 32] = rand::Rng::gen(&mut rng);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+/// Hash a token with SHA-256 for safe storage.
+///
+/// Store the hash in the database; compare by hashing the presented token.
+pub fn hash_token(token: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
 }

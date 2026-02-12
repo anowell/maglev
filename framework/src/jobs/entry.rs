@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -13,14 +15,36 @@ pub enum JobStatus {
     Expired,
 }
 
+impl JobStatus {
+    /// Returns the status as a static string slice.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Expired => "expired",
+        }
+    }
+}
+
 impl std::fmt::Display for JobStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pending => write!(f, "pending"),
-            Self::Running => write!(f, "running"),
-            Self::Completed => write!(f, "completed"),
-            Self::Failed => write!(f, "failed"),
-            Self::Expired => write!(f, "expired"),
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for JobStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "running" => Ok(Self::Running),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "expired" => Ok(Self::Expired),
+            other => Err(format!("unknown job status: {other}")),
         }
     }
 }
@@ -77,13 +101,6 @@ impl TryFrom<String> for JobStatus {
     type Error = String;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        match s.as_str() {
-            "pending" => Ok(Self::Pending),
-            "running" => Ok(Self::Running),
-            "completed" => Ok(Self::Completed),
-            "failed" => Ok(Self::Failed),
-            "expired" => Ok(Self::Expired),
-            other => Err(format!("unknown job status: {other}")),
-        }
+        s.parse()
     }
 }
